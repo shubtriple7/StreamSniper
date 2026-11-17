@@ -191,8 +191,9 @@ def burn_subtitles(
         shutil.copy(subtitle_path, temp_subtitle)
 
         # 构建 FFmpeg 命令
-        # 使用 subtitles 滤镜烧录字幕
-        subtitle_filter = f"subtitles={temp_subtitle}:force_style='FontSize={font_size},MarginV={margin_v}'"
+        # 使用 subtitles 滤镜烧录字幕（转义 Windows 路径分隔符和冒号）
+        escaped_sub = str(temp_subtitle).replace('\\', '/').replace(':', '\\:')
+        subtitle_filter = f"subtitles='{escaped_sub}':force_style='FontSize={font_size},MarginV={margin_v}'"
 
         cmd = [
             ffmpeg_path,

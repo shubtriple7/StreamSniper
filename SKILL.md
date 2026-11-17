@@ -1,26 +1,68 @@
 ---
 name: youtube-clipper
-description: >
-  YouTube 视频智能剪辑工具。下载视频和字幕，AI 分析生成精细章节（几分钟级别），
-  用户选择片段后自动剪辑、翻译字幕为中英双语、烧录字幕到视频，并生成总结文案。
-  使用场景：当用户需要剪辑 YouTube 视频、生成短视频片段、制作双语字幕版本时。
-  关键词：视频剪辑、YouTube、字幕翻译、双语字幕、视频下载、clip video
-allowed-tools:
-  - Read
-  - Write
-  - Bash
-  - Glob
-  - AskUserQuestion
-model: claude-sonnet-4-5-20250514
+description: >-
+  多平台视频与实时直播智能剪辑工具 (支持 YouTube, Twitch, Kick)。支持两种工作模式：
+  1. 录播/视频章节精细剪辑：AI 拆解 2-5 分钟独立话题章节、用户点选片段、双语字幕烧录与总结文案生成；
+  2. 实时直播盯盘与爆款猎手 (Live Hype Hunter)：持续挂机监听直播流与弹幕聊天室，根据弹幕喷涌速率 (Chat Velocity Spike) 与高潮词 (KEKW/LMAO/W/L/💀/WTF/CLIP) 自动截取 30 秒高光切片，结合音频爆发与台词 Hook 智能计算爆款指数 (Viral Score 0-100%) 并给出排名及发布文案。
+  使用场景：当用户需要剪辑 YouTube / Twitch / Kick 视频、录制/切片直播流片段、实时监控直播抓取爆款热点、制作双语字幕版本时。
+  关键词：视频剪辑、直播剪辑、直播盯盘、弹幕高潮检测、爆款切片、YouTube、Twitch、Kick、Live Stream、Hype Detector、Viral Clipper、字幕翻译、双语字幕、Whisper转录、clip video
 ---
 
-# YouTube 视频智能剪辑工具
+# 视频与直播流智能剪辑工具 (YouTube / Twitch / Kick)
 
-> **Installation**: If you're installing this skill from GitHub, please refer to [README.md](README.md#installation) for installation instructions. The recommended method is `npx skills add https://github.com/op7418/Youtube-clipper-skill`.
+支持 YouTube (视频/直播/Shorts)、Twitch (直播/VOD/Clips)、Kick (直播/VOD/Clips)。内置 Faster-Whisper 语音转录与实时聊天室热度分析引擎。
 
-## 工作流程
+---
 
-你将按照以下 6 个阶段执行 YouTube 视频剪辑任务：
+## 模式选择
+
+本工具有两大工作模式，根据用户指令自动选择：
+
+* **模式 A: 常规视频 / 录播智能精细剪辑 (VOD / Full Video Mode)**
+  * 针对已完结的视频或录播。
+  * 下载视频与字幕（若无字幕自动使用 Whisper 本地转录）。
+  * AI 细粒度分析 2-5 分钟章节，用户挑选心仪段落，制作中英双语硬字幕与摘要。
+
+* **模式 B: 实时直播盯盘与爆款猎手 (Live Stream Hype Hunter Mode)**
+  * 针对正在直播的房间（YouTube Live / Twitch / Kick）。
+  * 持续挂机录制直播流，后台匿名接入实时弹幕（Twitch IRC / Kick Pusher / YouTube Live Chat）。
+  * 实时计算弹幕涌入速率（Messages/sec）与情绪浓度（`KEKW`, `LMAO`, `W`, `L`, `💀`, `WTF`, `CLIP IT` 等）。
+  * 当热度突破自适应基线（如 2.2 倍爆发）时，自动触发 30 秒高能片段保存。
+  * 盯盘结束时，结合音频音量暴增（尖叫/欢呼）与 Whisper 台词 Hook，综合计算 0-100% **爆款潜力指数 (Viral Score %)**，生成排行榜与发帖标题建议！
+
+---
+
+## 模式 B 执行指南 (实时直播盯盘与爆款猎手)
+
+当用户说 *"盯盘这个直播间"*, *"监控直播并根据弹幕高潮剪 30 秒切片"*, *"找出最可能爆款的片段"* 时：
+
+1. **调用 `hype_monitor.py` 脚本**:
+   ```bash
+   # 监控直播 10 分钟 (600秒)，每段切片 30 秒
+   python scripts/hype_monitor.py <live_url> --duration 600 --clip-len 30
+
+   # 调整敏感度 (例如 2.0 倍弹幕暴增即触发)
+   python scripts/hype_monitor.py <live_url> --duration 1200 --sensitivity 2.0
+   ```
+
+2. **自动执行流程**:
+   - 后台无损拉取直播音视频流
+   - 实时挂接 Twitch IRC / Kick Pusher / YouTube 聊天流
+   - 动态更新自适应弹幕基线（EMA），精准过滤平缓对话，捕捉突发爆点
+   - 命中高潮时自动截取 `[Peak-15s, Peak+15s]`
+   - 调用 Faster-Whisper 自动转录高潮时主播的反应与台词
+   - 调用 `viral_scorer.py` 评估爆款指数，生成 `VIRAL_RANKING_REPORT.md`
+
+3. **向用户展示**:
+   - 捕获到的高光总数与时长
+   - 爆款排行榜（Top 3 附带推荐短视频标题与标签）
+   - 用户可指定片段一键烧录双语字幕
+
+---
+
+## 模式 A 工作流程 (常规视频 / 录播章节剪辑)
+
+你将按照以下 6 个阶段执行视频/录播剪辑任务：
 
 ### 阶段 1: 环境检测
 
@@ -33,73 +75,68 @@ model: claude-sonnet-4-5-20250514
 
 2. 检测 FFmpeg 版本和 libass 支持
    ```bash
-   # 优先检查 ffmpeg-full（macOS）
-   /opt/homebrew/opt/ffmpeg-full/bin/ffmpeg -version
-
-   # 检查标准 FFmpeg
    ffmpeg -version
-
    # 验证 libass 支持（字幕烧录必需）
    ffmpeg -filters 2>&1 | grep subtitles
    ```
 
-3. 检测 Python 依赖
+3. 检测 Python 依赖 (含 Faster-Whisper 与 Kick 支持)
    ```bash
-   python3 -c "import yt_dlp; print('✅ yt-dlp available')"
-   python3 -c "import pysrt; print('✅ pysrt available')"
+   python -c "import yt_dlp, pysrt, faster_whisper, curl_cffi; print('✅ All dependencies available')"
    ```
 
 **如果环境检测失败**:
-- yt-dlp 未安装: 提示 `brew install yt-dlp` 或 `pip install yt-dlp`
-- FFmpeg 无 libass: 提示安装 ffmpeg-full
-  ```bash
-  brew install ffmpeg-full  # macOS
-  ```
-- Python 依赖缺失: 提示 `pip install pysrt python-dotenv`
-
-**注意**:
-- 标准 Homebrew FFmpeg 不包含 libass，无法烧录字幕
-- ffmpeg-full 路径: `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg` (Apple Silicon)
-- 必须先通过环境检测才能继续
+- yt-dlp 未安装: 提示 `pip install yt-dlp`
+- FFmpeg 无 libass: 提示安装带 libass 的 FFmpeg
+- Python 依赖缺失: 提示 `pip install yt-dlp pysrt python-dotenv faster-whisper curl_cffi`
 
 ---
 
-### 阶段 2: 下载视频
+### 阶段 2: 下载视频或捕获直播流
 
-**目标**: 下载 YouTube 视频和英文字幕
+**目标**: 下载视频或录制实时直播流片段，并获取/生成字幕
 
-1. 询问用户 YouTube URL
+1. 询问用户媒体 URL (支持 YouTube, Twitch, Kick)
+   - 若为正在进行的直播流：询问用户想要录制/捕获的时长（例如录制 3 分钟，即 `--duration 180`，默认 300 秒）
+   - 若为 YouTube 直播流：可询问是否启用 `--live-from-start` 从直播开头抓取
 
-2. 调用 download_video.py 脚本
+2. 调用 `download_video.py` 脚本
    ```bash
-   cd ~/.claude/skills/youtube-clipper
-   python3 scripts/download_video.py <youtube_url>
+   # 常规视频或录播 (VOD)
+   python scripts/download_video.py <url>
+
+   # 正在进行的直播流 (如 Twitch / Kick / YouTube Live，录制 300 秒)
+   python scripts/download_video.py <live_url> --duration 300
+
+   # YouTube 直播流 (从头开始抓取 DVR)
+   python scripts/download_video.py <youtube_live_url> --live-from-start
    ```
 
-3. 脚本会：
-   - 下载视频（最高 1080p，mp4 格式）
-   - 下载英文字幕（VTT 格式，自动字幕作为备选）
-   - 输出文件路径和视频信息
+3. 脚本会自动：
+   - 自动识别平台（YouTube / Twitch / Kick）与媒体类型（Live / VOD / Clip）
+   - 下载视频或录制指定时长的直播流
+   - 尝试下载官方字幕（如有）
+   - **智能语音转录**: 若平台无字幕（如 Twitch/Kick/未附带字幕的直播），自动调用 Faster-Whisper 本地模型生成高质量 SRT 字幕！
+   - 输出视频和字幕文件路径
 
 4. 向用户展示：
-   - 视频标题
-   - 视频时长
-   - 文件大小
-   - 下载路径
+   - 媒体标题、所属平台与状态（直播 / 录播）
+   - 时长与文件大小
+   - 视频及字幕下载路径
 
 **输出**:
-- 视频文件: `<id>.mp4`（使用视频 ID 命名，避免特殊字符问题）
-- 字幕文件: `<id>.en.vtt`
+- 视频文件: `<id>.mp4`
+- 字幕文件: `<id>.srt` 或 `<id>.vtt`
 
 ---
 
 ### 阶段 3: 分析章节（核心差异化功能）
 
-**目标**: 使用 Claude AI 分析字幕内容，生成精细章节（2-5 分钟级别）
+**目标**: 使用 AI 分析字幕内容，生成精细章节（2-5 分钟级别）
 
-1. 调用 analyze_subtitles.py 解析 VTT 字幕
+1. 调用 analyze_subtitles.py 解析字幕 (支持 VTT 与 SRT 格式)
    ```bash
-   python3 scripts/analyze_subtitles.py <subtitle_path>
+   python scripts/analyze_subtitles.py <subtitle_path>
    ```
 
 2. 脚本会输出结构化字幕数据：
@@ -169,7 +206,7 @@ model: claude-sonnet-4-5-20250514
 
 #### 5.1 剪辑视频片段
 ```bash
-python3 scripts/clip_video.py <video_path> <start_time> <end_time> <output_path>
+python scripts/clip_video.py <video_path> <start_time> <end_time> <output_path>
 ```
 - 使用 FFmpeg 精确剪辑
 - 保持原始视频质量
@@ -183,7 +220,7 @@ python3 scripts/clip_video.py <video_path> <start_time> <end_time> <output_path>
 
 #### 5.3 翻译字幕（如果用户选择）
 ```bash
-python3 scripts/translate_subtitles.py <subtitle_path>
+python scripts/translate_subtitles.py <subtitle_path>
 ```
 - **批量翻译优化**: 每批 20 条字幕一起翻译（节省 95% API 调用）
 - 翻译策略：
@@ -200,7 +237,7 @@ python3 scripts/translate_subtitles.py <subtitle_path>
 
 #### 5.5 烧录字幕到视频（如果用户选择）
 ```bash
-python3 scripts/burn_subtitles.py <video_path> <subtitle_path> <output_path>
+python scripts/burn_subtitles.py <video_path> <subtitle_path> <output_path>
 ```
 - 使用 ffmpeg-full（libass 支持）
 - **使用临时目录解决路径空格问题**（关键！）
@@ -212,7 +249,7 @@ python3 scripts/burn_subtitles.py <video_path> <subtitle_path> <output_path>
 
 #### 5.6 生成总结文案（如果用户选择）
 ```bash
-python3 scripts/generate_summary.py <chapter_info>
+python scripts/generate_summary.py <chapter_info>
 ```
 - 基于章节标题、摘要和关键词
 - 生成适合社交媒体的文案

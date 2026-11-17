@@ -33,8 +33,8 @@ def time_to_seconds(time_str: str) -> float:
         >>> time_to_seconds("45.678")
         45.678
     """
-    # 移除空格
-    time_str = time_str.strip()
+    # 移除空格并将逗号替换为点（兼容 SRT 和 VTT 格式）
+    time_str = time_str.strip().replace(',', '.')
 
     # 分割时间部分
     parts = time_str.split(':')
@@ -42,14 +42,14 @@ def time_to_seconds(time_str: str) -> float:
     if len(parts) == 3:
         # HH:MM:SS.mmm
         hours, minutes, seconds = parts
-        return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+        return round(int(hours) * 3600 + int(minutes) * 60 + float(seconds), 3)
     elif len(parts) == 2:
         # MM:SS.mmm
         minutes, seconds = parts
-        return int(minutes) * 60 + float(seconds)
+        return round(int(minutes) * 60 + float(seconds), 3)
     else:
         # SS.mmm
-        return float(parts[0])
+        return round(float(parts[0]), 3)
 
 
 def seconds_to_time(seconds: float, include_hours: bool = True, use_comma: bool = False) -> str:
@@ -101,19 +101,19 @@ def sanitize_filename(filename: str, max_length: int = 100) -> str:
         >>> sanitize_filename("AGI 不是时间点，是指数曲线")
         'AGI_不是时间点_是指数曲线'
     """
-    # 移除或替换非法字符
+    # 移除或替换非法字符和常用中文标点
     # Windows/Mac/Linux 通用的非法字符
-    illegal_chars = r'[<>:"/\\|?*]'
+    illegal_chars = r'[<>:"/\\|?*，：？；！]'
     filename = re.sub(illegal_chars, '_', filename)
-
-    # 移除开头和结尾的空格和点
-    filename = filename.strip('. ')
 
     # 替换空格为下划线
     filename = filename.replace(' ', '_')
 
     # 移除连续的下划线
     filename = re.sub(r'_+', '_', filename)
+
+    # 移除开头和结尾的空格、点和下划线
+    filename = filename.strip('._ ')
 
     # 限制长度
     if len(filename) > max_length:
@@ -257,32 +257,58 @@ def get_video_duration_display(seconds: float) -> str:
         return f"{minutes:02d}:{secs:02d}"
 
 
-def validate_url(url: str) -> bool:
+def parse_url_info(url: str) -> dict:
     """
-    验证 YouTube URL 格式
+    识别视频平台和 URL 类型 (支持 YouTube, Twitch, Kick)
 
     Args:
-        url: YouTube URL
+        url: 视频或直播 URL
+
+    Returns:
+        dict: {
+            'platform': 'youtube' | 'twitch' | 'kick' | 'unknown',
+            'type': 'video' | 'live' | 'vod' | 'clip',
+            'valid': bool
+        }
+    """
+    url = url.strip()
+
+    # YouTube patterns
+    if re.match(r'https?://(?:www\.)?youtube\.com/live/[\w-]+', url):
+        return {'platform': 'youtube', 'type': 'live', 'valid': True}
+    if re.match(r'https?://(?:www\.)?(?:youtube\.com/(?:watch\?v=|embed/|shorts/)|youtu\.be/)[\w-]+', url):
+        return {'platform': 'youtube', 'type': 'video', 'valid': True}
+
+    # Twitch patterns
+    if re.match(r'https?://(?:www\.)?twitch\.tv/videos/\d+', url):
+        return {'platform': 'twitch', 'type': 'vod', 'valid': True}
+    if re.match(r'https?://(?:clips\.twitch\.tv/|(?:\w+\.)?twitch\.tv/[^/]+/clip/)[\w-]+', url):
+        return {'platform': 'twitch', 'type': 'clip', 'valid': True}
+    if re.match(r'https?://(?:www\.)?twitch\.tv/[\w-]+', url):
+        return {'platform': 'twitch', 'type': 'live', 'valid': True}
+
+    # Kick patterns
+    if re.match(r'https?://(?:www\.)?kick\.com/video/[\w-]+', url):
+        return {'platform': 'kick', 'type': 'vod', 'valid': True}
+    if re.match(r'https?://(?:www\.)?kick\.com/(?:clips/[\w-]+|[\w-]+\?clip=[\w-]+)', url):
+        return {'platform': 'kick', 'type': 'clip', 'valid': True}
+    if re.match(r'https?://(?:www\.)?kick\.com/[\w-]+', url):
+        return {'platform': 'kick', 'type': 'live', 'valid': True}
+
+    return {'platform': 'unknown', 'type': 'unknown', 'valid': False}
+
+
+def validate_url(url: str) -> bool:
+    """
+    验证 URL 格式是否受支持 (YouTube, Twitch, Kick)
+
+    Args:
+        url: 视频或直播 URL
 
     Returns:
         bool: 是否有效
-
-    Examples:
-        >>> validate_url("https://youtube.com/watch?v=Ckt1cj0xjRM")
-        True
-        >>> validate_url("https://youtu.be/Ckt1cj0xjRM")
-        True
-        >>> validate_url("invalid_url")
-        False
     """
-    # 支持的 YouTube URL 格式
-    patterns = [
-        r'https?://(?:www\.)?youtube\.com/watch\?v=[\w-]+',
-        r'https?://(?:www\.)?youtu\.be/[\w-]+',
-        r'https?://(?:www\.)?youtube\.com/embed/[\w-]+',
-    ]
-
-    return any(re.match(pattern, url) for pattern in patterns)
+    return parse_url_info(url)['valid']
 
 
 def ensure_directory(path: Path) -> Path:
@@ -317,9 +343,19 @@ if __name__ == "__main__":
     assert parse_time_range("00:00 - 03:15") == (0.0, 195.0)
     assert parse_time_range("01:30:00-01:33:15") == (5400.0, 5595.0)
 
-    # 测试 URL 验证
+    # 测试 URL 验证 (YouTube, Twitch, Kick)
     assert validate_url("https://youtube.com/watch?v=Ckt1cj0xjRM") == True
     assert validate_url("https://youtu.be/Ckt1cj0xjRM") == True
+    assert validate_url("https://www.youtube.com/live/5qap5aO4i9A") == True
+    assert validate_url("https://www.twitch.tv/shroud") == True
+    assert validate_url("https://www.twitch.tv/videos/1234567890") == True
+    assert validate_url("https://kick.com/xqc") == True
+    assert validate_url("https://kick.com/video/5a707a2a-43cf-424a-9b16-9ea67d1629d8") == True
     assert validate_url("invalid_url") == False
+
+    # 测试平台解析
+    assert parse_url_info("https://www.twitch.tv/shroud")['platform'] == 'twitch'
+    assert parse_url_info("https://kick.com/xqc")['platform'] == 'kick'
+    assert parse_url_info("https://www.youtube.com/live/5qap5aO4i9A")['type'] == 'live'
 
     print("✅ All tests passed!")
